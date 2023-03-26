@@ -10,7 +10,7 @@ pub const IpcMsgType = enum(u32) {
     MsgGetMarks,
     MsgGetBarConfig,
     MsgGetVersion,
-    MsgGetBindingMondes,
+    MsgGetBindingModes,
     MsgGetConfig,
     MsgSendTick,
     MsgSync,
@@ -27,8 +27,8 @@ pub const IpcMsgType = enum(u32) {
     EventTick = ((1<<31) | 7),
     EventBarStateUpdate = ((1<<31) | 20),
     EventInput = ((1<<31) | 21),
-    EventMessage = ((1<<31 | 30)),
-    EventClientFilter = ((1<<31) | 29)
+    EventClientFilter = ((1<<31) | 29),
+    EventMessage = ((1<<31 | 30))
 };
 
 pub const IpcMsg = struct {
@@ -42,7 +42,6 @@ pub const IpcMsgHeader = struct {
 };
 
 const MsgParseError = error {
-    // Header is invalid
     InvalidHeader,
 };
 

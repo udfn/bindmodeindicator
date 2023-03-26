@@ -12,7 +12,7 @@ const ModeIndicatorState = struct {
         .impl = &MultiRenderBufferImpl
     },
     sway:swayipc.IpcConnection,
-    nwl:nwl.NwlState,
+    nwl:nwl.State,
     allocator:std.mem.Allocator,
     rec_surface:?*c.cairo_surface_t = null,
     cur_buffer:?*nwl.ShmBuffer = null,
@@ -29,12 +29,12 @@ fn bufferDestroy(buffer:*nwl.ShmBuffer, bufferman:*nwl.ShmBufferMan) callconv(.C
     c.cairo_surface_destroy(cairo_surface);
 }
 
-const MultiRenderBufferImpl = nwl.ShmBufferMan.RendererImpl{
+const MultiRenderBufferImpl = nwl.ShmBufferMan.BufferRendererImpl{
     .buffer_create = bufferCreate,
     .buffer_destroy = bufferDestroy
 };
 
-fn renderNoOp(surface:*nwl.NwlSurface) callconv(.C) void {
+fn renderNoOp(surface:*nwl.Surface) callconv(.C) void {
     _ = surface;
 }
 
@@ -58,7 +58,7 @@ fn renderSurface(cairo_surface:*c.cairo_surface_t, string:[:0]const u8) void {
     c.cairo_destroy(cr);
 }
 
-fn multiRenderRender(surface:*nwl.NwlSurface) callconv(.C) void {
+fn multiRenderRender(surface:*nwl.Surface) callconv(.C) void {
     const mistate = @fieldParentPtr(ModeIndicatorState, "nwl", surface.state);
     surface.renderer.rendering = true;
     defer surface.renderer.rendering = false;
@@ -97,7 +97,7 @@ fn multiRenderRender(surface:*nwl.NwlSurface) callconv(.C) void {
     }
 }
 
-fn renderSwapBuffers(surface:*nwl.NwlSurface, x:i32, y:i32) callconv(.C) void {
+fn renderSwapBuffers(surface:*nwl.Surface, x:i32, y:i32) callconv(.C) void {
     _ = x;
     _ = y;
     var mistate = @fieldParentPtr(ModeIndicatorState, "nwl", surface.state);
@@ -114,7 +114,7 @@ fn renderSwapBuffers(surface:*nwl.NwlSurface, x:i32, y:i32) callconv(.C) void {
     }
 }
 
-const MultiSurfaceRenderImpl = nwl.NwlRendererImpl {
+const MultiSurfaceRenderImpl = nwl.RendererImpl {
     .apply_size = renderNoOp,
     .surface_destroy = renderNoOp,
     .swap_buffers = renderSwapBuffers,
@@ -122,7 +122,7 @@ const MultiSurfaceRenderImpl = nwl.NwlRendererImpl {
     .destroy = renderNoOp
 };
 
-fn handleSurfaceDestroy(surface:*nwl.NwlSurface) callconv(.C) void {
+fn handleSurfaceDestroy(surface:*nwl.Surface) callconv(.C) void {
     const state = @fieldParentPtr(ModeIndicatorState, "nwl", surface.state);
     if (!surface.flags.nwl_frees) {
         state.allocator.destroy(surface);
@@ -130,8 +130,8 @@ fn handleSurfaceDestroy(surface:*nwl.NwlSurface) callconv(.C) void {
     std.log.info("flags {}", .{surface.flags});
 }
 
-fn createBindSurface(state:*ModeIndicatorState, output:*nwl.NwlOutput) !void {
-    var surface = try state.allocator.create(nwl.NwlSurface);
+fn createBindSurface(state:*ModeIndicatorState, output:*nwl.Output) !void {
+    var surface = try state.allocator.create(nwl.Surface);
     surface.init(&state.nwl, "bindmodeindicator");
     try surface.roleLayershell(output.output, 3);
     surface.setSize(128, 32);
@@ -146,7 +146,7 @@ fn createBindSurface(state:*ModeIndicatorState, output:*nwl.NwlOutput) !void {
     surface.commit();
 }
 
-fn handleNewOutput(output:*nwl.NwlOutput) callconv(.C) void {
+fn handleNewOutput(output:*nwl.Output) callconv(.C) void {
     const mistate = @fieldParentPtr(ModeIndicatorState, "nwl", output.state);
     if (output.scale > mistate.scale) {
         mistate.scale = output.scale;
@@ -156,7 +156,7 @@ fn handleNewOutput(output:*nwl.NwlOutput) callconv(.C) void {
     };
 }
 
-fn handleDestroyOutput(output:*nwl.NwlOutput) callconv(.C) void {
+fn handleDestroyOutput(output:*nwl.Output) callconv(.C) void {
     var it = output.state.surfaces.iterator();
     while (it.next()) |surf| {
         if (surf.userdata == @ptrCast(*anyopaque, output)) {
@@ -185,7 +185,7 @@ const SwayMsg = struct {
     msgtype:swayipc.IpcMsgType
 };
 
-fn handleSwayMsg(state:*nwl.NwlState, data:?*const anyopaque) callconv(.C) void {
+fn handleSwayMsg(state:*nwl.State, data:?*const anyopaque) callconv(.C) void {
     var mistate = @fieldParentPtr(ModeIndicatorState, "nwl", state);
     var arena = std.heap.ArenaAllocator.init(mistate.allocator);
     defer arena.deinit();
