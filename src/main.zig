@@ -15,21 +15,21 @@ const ModeIndicatorState = struct {
     nwl:nwl.State,
     allocator:std.mem.Allocator,
     rec_surface:?*c.cairo_surface_t = null,
-    cur_buffer:?*nwl.ShmBuffer = null,
+    cur_buffer:?*nwl.ShmBufferMan.Buffer = null,
     scale:c_int = 1,
 };
 
-fn bufferCreate(buffer:*nwl.ShmBuffer, bufferman:*nwl.ShmBufferMan) callconv(.C) void {
+fn bufferCreate(buffer:*nwl.ShmBufferMan.Buffer, bufferman:*nwl.ShmBufferMan) callconv(.C) void {
     buffer.data = c.cairo_image_surface_create_for_data(buffer.bufferdata, c.CAIRO_FORMAT_ARGB32, @intCast(c_int, bufferman.width), @intCast(c_int, bufferman.height), @intCast(c_int, bufferman.stride));
 }
 
-fn bufferDestroy(buffer:*nwl.ShmBuffer, bufferman:*nwl.ShmBufferMan) callconv(.C) void {
+fn bufferDestroy(buffer:*nwl.ShmBufferMan.Buffer, bufferman:*nwl.ShmBufferMan) callconv(.C) void {
     _ = bufferman;
     var cairo_surface = @ptrCast(*c.cairo_surface_t, @alignCast(@alignOf(*c.cairo_surface_t), buffer.data));
     c.cairo_surface_destroy(cairo_surface);
 }
 
-const MultiRenderBufferImpl = nwl.ShmBufferMan.BufferRendererImpl{
+const MultiRenderBufferImpl = nwl.ShmBufferMan.RendererImpl{
     .buffer_create = bufferCreate,
     .buffer_destroy = bufferDestroy
 };
@@ -114,7 +114,7 @@ fn renderSwapBuffers(surface:*nwl.Surface, x:i32, y:i32) callconv(.C) void {
     }
 }
 
-const MultiSurfaceRenderImpl = nwl.RendererImpl {
+const MultiSurfaceRenderImpl = nwl.Surface.Renderer.Impl {
     .apply_size = renderNoOp,
     .surface_destroy = renderNoOp,
     .swap_buffers = renderSwapBuffers,
@@ -127,19 +127,24 @@ fn handleSurfaceDestroy(surface:*nwl.Surface) callconv(.C) void {
     if (!surface.flags.nwl_frees) {
         state.allocator.destroy(surface);
     }
-    std.log.info("flags {}", .{surface.flags});
 }
 
 fn createBindSurface(state:*ModeIndicatorState, output:*nwl.Output) !void {
     var surface = try state.allocator.create(nwl.Surface);
+    surface.* = .{
+        .renderer = .{.impl = &MultiSurfaceRenderImpl},
+        .userdata = output,
+        .impl = .{
+            .destroy = handleSurfaceDestroy
+        },
+        .flags = .{
+            .no_autoscale = true
+        }
+    };
     surface.init(&state.nwl, "bindmodeindicator");
     try surface.roleLayershell(output.output, 3);
     surface.setSize(128, 32);
     surface.role.layer.wl.setAnchor(.{.top = true, .left = true});
-    surface.renderer.impl = &MultiSurfaceRenderImpl;
-    surface.userdata = output;
-    surface.impl.destroy = handleSurfaceDestroy;
-    surface.flags.no_autoscale = true;
     var region = try surface.state.wl.compositor.?.createRegion();
     surface.wl.surface.setInputRegion(region);
     defer region.destroy();
