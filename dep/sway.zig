@@ -41,19 +41,15 @@ pub const IpcMsgHeader = struct {
     length:usize
 };
 
-const MsgParseError = error {
-    InvalidHeader,
-};
-
 pub fn parseHeader(msg:[]const u8) !IpcMsgHeader {
     if (msg.len < 14) {
-        return MsgParseError.InvalidHeader;
+        return error.InvalidHeader;
     }
     // Check for "i3-ipc"?
     const length = std.mem.readIntNative(u32, msg[6..10]);
-    const msgtype = @intToEnum(IpcMsgType, std.mem.readIntNative(u32, msg[10..14]));
+    const msgtype = std.mem.readIntNative(u32, msg[10..14]);
     return .{
-        .msgtype = msgtype,
+        .msgtype = @intToEnum(IpcMsgType, msgtype),
         .length = length
     };
 }
@@ -78,27 +74,21 @@ pub const IpcConnection = struct {
         try self.sendMsg(msgtype, payload);
         return try self.readMsg(allocator);
     }
-    const stackbufsize = 512;
+
     pub fn readMsg(self:IpcConnection, allocator:std.mem.Allocator) !IpcMsg {
-        var buf:[stackbufsize]u8 = undefined;
-        const readAmt = try self.stream.read(&buf);
-        if (readAmt < 14) {
-            // End of stream..?
-            return error.IncorrectReadAmount;
+        var headerbuf:[14]u8 = undefined;
+        if (try self.stream.readAll(&headerbuf) != 14) {
+            return error.EndOfStream;
         }
-        const header = try parseHeader(&buf);
-        const msgbuf = try allocator.alloc(u8, header.length);
-        std.mem.copy(u8, msgbuf, buf[14..readAmt]);
-        if (header.length > stackbufsize-14) {
-            // long message: read more
-            _ = self.stream.readAll(msgbuf[stackbufsize-14..]) catch |err| {
-                log.err("failed: {s}", .{@errorName(err)});
-                return err;
-            };
+        const head = try parseHeader(&headerbuf);
+        var buf = try allocator.alloc(u8, head.length);
+        errdefer allocator.free(buf);
+        if (try self.stream.readAll(buf) != head.length) {
+            return error.IncompleteMessage;
         }
         return .{
-            .msgtype = header.msgtype,
-            .content = msgbuf
+            .msgtype = head.msgtype,
+            .content = buf
         };
     }
 };
