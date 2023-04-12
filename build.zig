@@ -28,12 +28,12 @@ pub fn build(b: *std.build.Builder) !void {
     exe.addModule("nwl", nwl.module("nwl"));
     exe.linkLibrary(nwl.artifact("nwl"));
     exe.linkSystemLibrary("cairo");
-    exe.install();
+    b.installArtifact(exe);
     exe.addAnonymousModule("sway", .{.source_file = .{.path = "dep/sway.zig" }});
     exe.addAnonymousModule("wayland", .{
         .source_file = .{ .generated = &scanner.result}
     });
-    const run_cmd = exe.run();
+    const run_cmd = b.addRunArtifact(exe);
     run_cmd.step.dependOn(b.getInstallStep());
     if (b.args) |args| {
         run_cmd.addArgs(args);
