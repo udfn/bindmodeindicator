@@ -15,18 +15,21 @@ const ModeIndicatorState = struct {
     nwl:nwl.State,
     allocator:std.mem.Allocator,
     rec_surface:?*c.cairo_surface_t = null,
-    cur_buffer:?*nwl.ShmBufferMan.Buffer = null,
+    cur_buffer:?c_uint = null,
     scale:c_int = 1,
+    cairo_surfaces:[4]*c.cairo_surface_t = undefined
 };
 
-fn bufferCreate(buffer:*nwl.ShmBufferMan.Buffer, bufferman:*nwl.ShmBufferMan) callconv(.C) void {
-    buffer.data = c.cairo_image_surface_create_for_data(buffer.bufferdata, c.CAIRO_FORMAT_ARGB32, @intCast(c_int, bufferman.width), @intCast(c_int, bufferman.height), @intCast(c_int, bufferman.stride));
+fn bufferCreate(buf_idx:c_uint, bufferman:*nwl.ShmBufferMan) callconv(.C) void {
+    const state = @fieldParentPtr(ModeIndicatorState, "bufferman", bufferman);
+    state.cairo_surfaces[buf_idx] = c.cairo_image_surface_create_for_data(bufferman.buffers[buf_idx].bufferdata,
+        c.CAIRO_FORMAT_ARGB32, @intCast(c_int, bufferman.width),
+        @intCast(c_int, bufferman.height), @intCast(c_int, bufferman.stride)).?;
 }
 
-fn bufferDestroy(buffer:*nwl.ShmBufferMan.Buffer, bufferman:*nwl.ShmBufferMan) callconv(.C) void {
-    _ = bufferman;
-    var cairo_surface = @ptrCast(*c.cairo_surface_t, @alignCast(@alignOf(*c.cairo_surface_t), buffer.data));
-    c.cairo_surface_destroy(cairo_surface);
+fn bufferDestroy(buf_idx:c_uint, bufferman:*nwl.ShmBufferMan) callconv(.C) void {
+    const state = @fieldParentPtr(ModeIndicatorState, "bufferman", bufferman);
+    c.cairo_surface_destroy(state.cairo_surfaces[buf_idx]);
 }
 
 const MultiRenderBufferImpl = nwl.ShmBufferMan.RendererImpl{
@@ -68,18 +71,17 @@ fn multiRenderRender(surface:*nwl.Surface) callconv(.C) void {
         if (mistate.bufferman.width != scaled_width) {
             mistate.bufferman.resize(surface.state, scaled_width, scaled_height, scaled_width*4, 0);
         }
-        mistate.cur_buffer = mistate.bufferman.getNext();
+        mistate.cur_buffer = mistate.bufferman.getNext() catch null;
         if (mistate.cur_buffer == null) {
             mistate.bufferman.setSlots(surface.state, mistate.bufferman.num_slots+1);
-            mistate.cur_buffer = mistate.bufferman.getNext();
-            if (mistate.cur_buffer == null) {
+            mistate.cur_buffer = mistate.bufferman.getNext() catch {
                 std.log.err("ARGH! CAN'T GET A BUFFER! Giving up!", .{});
                 surface.state.run_with_zero_surfaces = false;
                 surface.state.num_surfaces = 0;
                 return;
-            }
+            };
         }
-        var cairo_surface = @ptrCast(*c.cairo_surface_t, @alignCast(@alignOf(*c.cairo_surface_t), mistate.cur_buffer.?.data));
+        var cairo_surface = mistate.cairo_surfaces[mistate.cur_buffer.?];
         var cr = c.cairo_create(cairo_surface);
         c.cairo_set_operator(cr, c.CAIRO_OPERATOR_CLEAR);
         c.cairo_paint(cr);
@@ -101,7 +103,8 @@ fn renderSwapBuffers(surface:*nwl.Surface, x:i32, y:i32) callconv(.C) void {
     _ = x;
     _ = y;
     var mistate = @fieldParentPtr(ModeIndicatorState, "nwl", surface.state);
-    if (mistate.cur_buffer) |buf| {
+    if (mistate.cur_buffer) |buf_idx| {
+        const buf = &mistate.bufferman.buffers[buf_idx];
         if (mistate.scale != surface.scale) {
             surface.scale = mistate.scale;
             surface.wl.surface.setBufferScale(surface.scale);
@@ -116,7 +119,6 @@ fn renderSwapBuffers(surface:*nwl.Surface, x:i32, y:i32) callconv(.C) void {
 
 const MultiSurfaceRenderImpl = nwl.Surface.Renderer.Impl {
     .apply_size = renderNoOp,
-    .surface_destroy = renderNoOp,
     .swap_buffers = renderSwapBuffers,
     .render = multiRenderRender,
     .destroy = renderNoOp
@@ -124,9 +126,8 @@ const MultiSurfaceRenderImpl = nwl.Surface.Renderer.Impl {
 
 fn handleSurfaceDestroy(surface:*nwl.Surface) callconv(.C) void {
     const state = @fieldParentPtr(ModeIndicatorState, "nwl", surface.state);
-    if (!surface.flags.nwl_frees) {
-        state.allocator.destroy(surface);
-    }
+    state.bufferman.finish();
+    state.allocator.destroy(surface);
 }
 
 fn createBindSurface(state:*ModeIndicatorState, output:*nwl.Output) !void {
