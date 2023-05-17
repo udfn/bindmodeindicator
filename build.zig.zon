@@ -3,8 +3,8 @@
 	.version = "0.1.0",
 	.dependencies = .{
 		.nwl = .{
-			.url = "https://github.com/udfn/nwl/archive/f30370fbdc7e08f2c2f3edb5515dd7020a2f5b22.tar.gz",
-			.hash = "1220bdeff4dcc56b29f1588a75a5339f0f555f58a04ea3e49351c2dd8bc1f54e9e68"
+			.url = "https://github.com/udfn/nwl/archive/4fe87700139b9feae8d7da939c694a6628422a6d.tar.gz",
+			.hash = "12207ea626854e73a8a20f09f5e8513907146895d435e98a0bc456f99b4956b51131"
 		},
 		.zigwayland = .{
 			.url = "https://github.com/udfn/zig-wayland/archive/26f17713adc436309bb43f4832811a9338a24015.tar.gz",

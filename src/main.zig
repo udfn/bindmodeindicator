@@ -207,8 +207,7 @@ fn handleSwayMsg(state:*nwl.State, data:?*const anyopaque) callconv(.C) void {
             };
         }
     };
-    var tok = std.json.TokenStream.init(msg.content);
-    const mode = std.json.parse(SwayBindMode, &tok, .{.allocator = allocator, .ignore_unknown_fields = true}) catch return;
+    const mode = std.json.parseFromSlice(SwayBindMode, allocator, msg.content, .{.ignore_unknown_fields = true}) catch return;
     if (mistate.rec_surface != null) {
         c.cairo_surface_destroy(mistate.rec_surface);
         mistate.rec_surface = null;
@@ -254,7 +253,7 @@ pub fn main() !void {
         }
     };
     defer _ = gpa.deinit();
-    try mistate.sway.sendMsg(.MsgSubscribe, "[\"mode\"]");
+    try mistate.sway.subscribe(&.{.EventMode});
     try mistate.nwl.waylandInit();
     defer mistate.nwl.waylandUninit();
     std.log.info("using {s} event loop", .{if (use_uring) "uring" else "nwl_poll"});

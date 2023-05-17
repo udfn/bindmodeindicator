@@ -28,7 +28,28 @@ pub const IpcMsgType = enum(u32) {
     EventBarStateUpdate = ((1<<31) | 20),
     EventInput = ((1<<31) | 21),
     EventClientFilter = ((1<<31) | 29),
-    EventMessage = ((1<<31 | 30))
+    EventMessage = ((1<<31 | 30)),
+
+    pub fn jsonStringify(self:IpcMsgType, options:std.json.StringifyOptions, out_stream:anytype) !void {
+        const string = switch(self) {
+            .EventWorkspace => "workspace",
+            .EventOutput => "output",
+            .EventMode => "mode",
+            .EventWindow => "window",
+            .EventBarConfigUpdate => "barconfig_update",
+            .EventBinding => "binding",
+            .EventShutdown => "shutdown",
+            .EventTick => "tick",
+            .EventBarStateUpdate => "bar_state_update",
+            .EventInput => "input",
+            .EventClientFilter => "clientfilter",
+            .EventMessage => "message",
+            else => return error.NotSubscribableEvent
+        };
+        try out_stream.writeByte('"');
+        try std.json.encodeJsonStringChars(string, options, out_stream);
+        try out_stream.writeByte('"');
+    }
 };
 
 pub const IpcMsg = struct {
@@ -68,6 +89,13 @@ pub const IpcConnection = struct {
             _ = try self.stream.writeAll(p[0..]);
             log.info("Sent {s} \"{s}\"", .{@tagName(msgtype), p});
         }
+    }
+
+    pub fn subscribe(self:IpcConnection, events:[]const IpcMsgType) !void {
+        var buf:[512]u8 = undefined;
+        var fbs = std.io.fixedBufferStream(&buf);
+        try std.json.stringify(events, .{}, fbs.writer());
+        try self.sendMsg(.MsgSubscribe, fbs.getWritten());
     }
 
     pub fn sendMsgWait(self:IpcConnection, allocator:std.mem.Allocator, msgtype:IpcMsgType, payload:?[]const u8) !IpcMsg {
