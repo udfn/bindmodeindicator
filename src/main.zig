@@ -124,32 +124,38 @@ const MultiSurfaceRenderImpl = nwl.Surface.Renderer.Impl {
     .destroy = renderNoOp
 };
 
-fn handleSurfaceDestroy(surface:*nwl.Surface) callconv(.C) void {
-    const state = @fieldParentPtr(ModeIndicatorState, "nwl", surface.state);
-    state.bufferman.finish();
-    state.allocator.destroy(surface);
-}
-
-fn createBindSurface(state:*ModeIndicatorState, output:*nwl.Output) !void {
-    var surface = try state.allocator.create(nwl.Surface);
-    surface.* = .{
+const BindModeSurface = struct {
+    nwl:nwl.Surface = .{
         .renderer = .{.impl = &MultiSurfaceRenderImpl},
-        .userdata = output,
         .impl = .{
             .destroy = handleSurfaceDestroy
         },
         .flags = .{
             .no_autoscale = true
         }
+    },
+    output:*nwl.Output
+};
+
+fn handleSurfaceDestroy(surface:*nwl.Surface) callconv(.C) void {
+    const state = @fieldParentPtr(ModeIndicatorState, "nwl", surface.state);
+    const bindsurface = @fieldParentPtr(BindModeSurface, "nwl", surface);
+    state.allocator.destroy(bindsurface);
+}
+
+fn createBindSurface(state:*ModeIndicatorState, output:*nwl.Output) !void {
+    var surface = try state.allocator.create(BindModeSurface);
+    surface.* = .{
+        .output = output,
     };
-    surface.init(&state.nwl, "bindmodeindicator");
-    try surface.roleLayershell(output.output, 3);
-    surface.setSize(128, 32);
-    surface.role.layer.wl.setAnchor(.{.top = true, .left = true});
-    var region = try surface.state.wl.compositor.?.createRegion();
-    surface.wl.surface.setInputRegion(region);
+    surface.nwl.init(&state.nwl, "bindmodeindicator");
+    try surface.nwl.roleLayershell(output.output, 3);
+    surface.nwl.setSize(128, 32);
+    surface.nwl.role.layer.wl.setAnchor(.{.top = true, .left = true});
+    var region = try surface.nwl.state.wl.compositor.?.createRegion();
+    surface.nwl.wl.surface.setInputRegion(region);
     defer region.destroy();
-    surface.commit();
+    surface.nwl.commit();
 }
 
 fn handleNewOutput(output:*nwl.Output) callconv(.C) void {
@@ -165,7 +171,8 @@ fn handleNewOutput(output:*nwl.Output) callconv(.C) void {
 fn handleDestroyOutput(output:*nwl.Output) callconv(.C) void {
     var it = output.state.surfaces.iterator();
     while (it.next()) |surf| {
-        if (surf.userdata == @ptrCast(*anyopaque, output)) {
+        const bindsurface = @fieldParentPtr(BindModeSurface, "nwl", surf);
+        if (bindsurface.output == output) {
             surf.destroyLater();
             break;
         }
@@ -256,6 +263,7 @@ pub fn main() !void {
     try mistate.sway.subscribe(&.{.EventMode});
     try mistate.nwl.waylandInit();
     defer mistate.nwl.waylandUninit();
+    defer mistate.bufferman.finish();
     std.log.info("using {s} event loop", .{if (use_uring) "uring" else "nwl_poll"});
     if (use_uring) {
         var ring = try std.os.linux.IO_Uring.init(8, 0);
