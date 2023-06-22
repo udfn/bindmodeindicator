@@ -86,7 +86,7 @@ fn multiRenderRender(surface:*nwl.Surface) callconv(.C) void {
         c.cairo_set_operator(cr, c.CAIRO_OPERATOR_CLEAR);
         c.cairo_paint(cr);
         c.cairo_set_operator(cr, c.CAIRO_OPERATOR_SOURCE);
-        c.cairo_scale(cr, @intToFloat(f64, mistate.scale), @intToFloat(f64, mistate.scale));
+        c.cairo_scale(cr, @floatFromInt(f64, mistate.scale), @floatFromInt(f64, mistate.scale));
         c.cairo_set_source_surface(cr, mistate.rec_surface, 0, 0);
         c.cairo_paint(cr);
         c.cairo_destroy(cr);
@@ -214,7 +214,7 @@ fn handleSwayMsg(state:*nwl.State, data:?*const anyopaque) callconv(.C) void {
             };
         }
     };
-    const mode = std.json.parseFromSlice(SwayBindMode, allocator, msg.content, .{.ignore_unknown_fields = true}) catch return;
+    const mode = std.json.parseFromSliceLeaky(SwayBindMode, allocator, msg.content, .{.ignore_unknown_fields = true}) catch return;
     if (mistate.rec_surface != null) {
         c.cairo_surface_destroy(mistate.rec_surface);
         mistate.rec_surface = null;
@@ -232,7 +232,7 @@ fn handleSwayMsg(state:*nwl.State, data:?*const anyopaque) callconv(.C) void {
     var it = state.surfaces.iterator();
     while (it.next()) |surf| {
         if (mistate.rec_surface != null) {
-            surf.setSize(@floatToInt(u32, @floor(rect.width)), 32);
+            surf.setSize(@intFromFloat(u32, @floor(rect.width)), 32);
             // Force slam the width here, to work around nwl
             surf.width = surf.desired_width;
         }
