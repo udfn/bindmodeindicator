@@ -23,8 +23,8 @@ const ModeIndicatorState = struct {
 fn bufferCreate(buf_idx:c_uint, bufferman:*nwl.ShmBufferMan) callconv(.C) void {
     const state = @fieldParentPtr(ModeIndicatorState, "bufferman", bufferman);
     state.cairo_surfaces[buf_idx] = c.cairo_image_surface_create_for_data(bufferman.buffers[buf_idx].bufferdata,
-        c.CAIRO_FORMAT_ARGB32, @intCast(c_int, bufferman.width),
-        @intCast(c_int, bufferman.height), @intCast(c_int, bufferman.stride)).?;
+        c.CAIRO_FORMAT_ARGB32, @intCast(bufferman.width),
+        @intCast(bufferman.height), @intCast(bufferman.stride)).?;
 }
 
 fn bufferDestroy(buf_idx:c_uint, bufferman:*nwl.ShmBufferMan) callconv(.C) void {
@@ -66,8 +66,8 @@ fn multiRenderRender(surface:*nwl.Surface) callconv(.C) void {
     surface.renderer.rendering = true;
     defer surface.renderer.rendering = false;
     if (mistate.cur_buffer == null and mistate.rec_surface != null) {
-        const scaled_width = surface.width * @intCast(u32, mistate.scale);
-        const scaled_height = surface.height * @intCast(u32, mistate.scale);
+        const scaled_width = surface.width * @as(u32, @intCast(mistate.scale));
+        const scaled_height = surface.height * @as(u32, @intCast(mistate.scale));
         if (mistate.bufferman.width != scaled_width) {
             mistate.bufferman.resize(surface.state, scaled_width, scaled_height, scaled_width*4, 0);
         }
@@ -86,7 +86,7 @@ fn multiRenderRender(surface:*nwl.Surface) callconv(.C) void {
         c.cairo_set_operator(cr, c.CAIRO_OPERATOR_CLEAR);
         c.cairo_paint(cr);
         c.cairo_set_operator(cr, c.CAIRO_OPERATOR_SOURCE);
-        c.cairo_scale(cr, @floatFromInt(f64, mistate.scale), @floatFromInt(f64, mistate.scale));
+        c.cairo_scale(cr, @floatFromInt(mistate.scale), @floatFromInt(mistate.scale));
         c.cairo_set_source_surface(cr, mistate.rec_surface, 0, 0);
         c.cairo_paint(cr);
         c.cairo_destroy(cr);
@@ -110,7 +110,7 @@ fn renderSwapBuffers(surface:*nwl.Surface, x:i32, y:i32) callconv(.C) void {
             surface.wl.surface.setBufferScale(surface.scale);
         }
         surface.wl.surface.attach(buf.wl_buffer, 0, 0);
-        surface.wl.surface.damageBuffer(0, 0, @intCast(i32, surface.width)*surface.scale, @intCast(i32, surface.height)*surface.scale);
+        surface.wl.surface.damageBuffer(0, 0, @as(i32, @intCast(surface.width))*surface.scale, @as(i32, @intCast(surface.height))*surface.scale);
         surface.commit();
     } else {
         std.log.err("BUG BUG BUG! Swap buffers without buffer!", .{});
@@ -204,9 +204,9 @@ fn handleSwayMsg(state:*nwl.State, data:?*const anyopaque) callconv(.C) void {
     defer arena.deinit();
     var allocator = arena.allocator();
     // uring passes msg in data
-    var msg = blk: {
+    var msg:*const SwayMsg = blk: {
         if (use_uring) {
-            break :blk @ptrCast(*const SwayMsg, @alignCast(@alignOf(*SwayMsg), data));
+            break :blk @alignCast(@ptrCast(data));
         } else {
             break :blk mistate.sway.readMsg(allocator) catch |err| {
                 std.log.err("failed parsing sway msg: {s}", .{@errorName(err)});
@@ -232,7 +232,7 @@ fn handleSwayMsg(state:*nwl.State, data:?*const anyopaque) callconv(.C) void {
     var it = state.surfaces.iterator();
     while (it.next()) |surf| {
         if (mistate.rec_surface != null) {
-            surf.setSize(@intFromFloat(u32, @floor(rect.width)), 32);
+            surf.setSize(@intFromFloat(@floor(rect.width)), 32);
             // Force slam the width here, to work around nwl
             surf.width = surf.desired_width;
         }

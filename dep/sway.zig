@@ -66,7 +66,7 @@ pub fn parseHeader(msg: []const u8) !IpcMsgHeader {
     // Check for "i3-ipc"?
     const length = std.mem.readIntNative(u32, msg[6..10]);
     const msgtype = std.mem.readIntNative(u32, msg[10..14]);
-    return .{ .msgtype = @enumFromInt(IpcMsgType, msgtype), .length = length };
+    return .{ .msgtype = @enumFromInt(msgtype), .length = length };
 }
 
 pub const IpcConnection = struct {
@@ -76,7 +76,7 @@ pub const IpcConnection = struct {
         var header: [14]u8 = undefined;
         std.mem.copy(u8, header[0..], "i3-ipc");
         std.mem.writeIntNative(u32, header[10..14], @intFromEnum(msgtype));
-        std.mem.writeIntNative(u32, header[6..10], if (payload) |p| @truncate(u32, p.len) else 0);
+        std.mem.writeIntNative(u32, header[6..10], if (payload) |p| @as(u32, @truncate(p.len)) else 0);
         _ = try self.stream.writeAll(&header);
 
         if (payload) |p| {
