@@ -30,7 +30,7 @@ pub const IpcMsgType = enum(u32) {
     EventClientFilter = ((1 << 31) | 29),
     EventMessage = ((1 << 31 | 30)),
 
-    pub fn jsonStringify(self: IpcMsgType, options: std.json.StringifyOptions, out_stream: anytype) !void {
+    pub fn jsonStringify(self: IpcMsgType, jw: anytype) !void {
         const string = switch (self) {
             .EventWorkspace => "workspace",
             .EventOutput => "output",
@@ -44,11 +44,9 @@ pub const IpcMsgType = enum(u32) {
             .EventInput => "input",
             .EventClientFilter => "clientfilter",
             .EventMessage => "message",
-            else => return error.NotSubscribableEvent,
+            else => unreachable
         };
-        try out_stream.writeByte('"');
-        try std.json.encodeJsonStringChars(string, options, out_stream);
-        try out_stream.writeByte('"');
+        try jw.write(string);
     }
 };
 
