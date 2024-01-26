@@ -1,14 +1,18 @@
 .{
 	.name = "bindmodeindicator",
 	.version = "0.1.0",
+	.paths = .{""},
 	.dependencies = .{
 		.nwl = .{
-			.url = "https://github.com/udfn/nwl/archive/8438bdc1221f96a5b7461ef8228fc69fd6360954.tar.gz",
-			.hash = "122058ca72c41b60fbfa47b49854a681e1efb1a3ea477af837b9c20cd2dfeb2c32a1"
+				.url = "https://github.com/udfn/nwl/archive/3069aa23bfcdcf41fda5e6faac45ffa32d6373f9.tar.gz",
+				.hash = "1220b59a33f94e6bfb0bf1b3d703f2211ba3a63cf65923c8c3113cadb5124226cf66"
+				// for testing :)
+				//.path = "../nwl"
 		},
 		.zigwayland = .{
-			.url = "https://github.com/udfn/zig-wayland/archive/8ac8d4ec44f7a1aca38a1625f9817b7ffd9443f3.tar.gz",
-			.hash = "1220db3e92d7365c044b4ef68507819ee2058d776ea50c1811fdb9af9b02c566a925"
-		}
+				.url = "https://github.com/udfn/zig-wayland/archive/7a5c469431a7e287bddd5d30492dae5c4bc12e2d.tar.gz",
+				.hash = "12205475c2d6ef3eba2c622c309458a87d341aae2c99239f6a5bf41759f2168f6694"
+				//.path = "../zig-wayland"
+		},
 	}
 }

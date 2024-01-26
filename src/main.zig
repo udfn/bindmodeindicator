@@ -42,7 +42,7 @@ fn renderNoOp(surface:*nwl.Surface) callconv(.C) void {
 }
 
 fn renderSurface(cairo_surface:*c.cairo_surface_t, string:[:0]const u8) void {
-    var cr = c.cairo_create(cairo_surface);
+    const cr = c.cairo_create(cairo_surface);
     c.cairo_select_font_face(cr, "sans", c.CAIRO_FONT_SLANT_NORMAL, c.CAIRO_FONT_WEIGHT_NORMAL);
     c.cairo_set_font_size(cr, 16);
     var extents:c.cairo_text_extents_t = undefined;
@@ -81,20 +81,21 @@ fn multiRenderRender(surface:*nwl.Surface) callconv(.C) void {
                 return;
             };
         }
-        var cairo_surface = mistate.cairo_surfaces[mistate.cur_buffer.?];
-        var cr = c.cairo_create(cairo_surface);
+        const cairo_surface = mistate.cairo_surfaces[mistate.cur_buffer.?];
+        const cr = c.cairo_create(cairo_surface);
+        defer c.cairo_destroy(cr);
         c.cairo_set_operator(cr, c.CAIRO_OPERATOR_CLEAR);
         c.cairo_paint(cr);
         c.cairo_set_operator(cr, c.CAIRO_OPERATOR_SOURCE);
         c.cairo_scale(cr, @floatFromInt(mistate.scale), @floatFromInt(mistate.scale));
         c.cairo_set_source_surface(cr, mistate.rec_surface, 0, 0);
         c.cairo_paint(cr);
-        c.cairo_destroy(cr);
     }
     if (mistate.cur_buffer != null) {
         surface.swapBuffers(0, 0);
     } else {
         surface.wl.surface.attach(null, 0, 0);
+        surface.unsetRole();
         surface.commit();
     }
 }
@@ -149,16 +150,25 @@ fn createBindSurface(state:*ModeIndicatorState, output:*nwl.Output) !void {
         .output = output,
     };
     surface.nwl.init(&state.nwl, "bindmodeindicator");
-    try surface.nwl.roleLayershell(output.output, 3);
-    surface.nwl.setSize(128, 32);
-    surface.nwl.role.layer.wl.setAnchor(.{.top = true, .left = true});
     var region = try surface.nwl.state.wl.compositor.?.createRegion();
     surface.nwl.wl.surface.setInputRegion(region);
     defer region.destroy();
     surface.nwl.commit();
 }
 
-fn handleNewOutput(output:*nwl.Output) callconv(.C) void {
+fn initLayerSurface(surface:*BindModeSurface, width:u32) !void {
+    try surface.nwl.roleLayershell(surface.output.output, 3);
+    surface.nwl.setSize(width, 32);
+    surface.nwl.role.layer.wl.setAnchor(.{.top = true, .left = true});
+
+}
+
+fn handleBoundGlobal(kind: nwl.State.BoundGlobalKind, data:*anyopaque) callconv(.C) void {
+    if (kind != .output) {
+        return;
+    }
+    const output:*nwl.Output = @ptrCast(@alignCast(data));
+    std.log.info("output {?s} created", .{output.name});
     const mistate = @fieldParentPtr(ModeIndicatorState, "nwl", output.state);
     if (output.scale > mistate.scale) {
         mistate.scale = output.scale;
@@ -168,7 +178,12 @@ fn handleNewOutput(output:*nwl.Output) callconv(.C) void {
     };
 }
 
-fn handleDestroyOutput(output:*nwl.Output) callconv(.C) void {
+fn handleDestroyGlobal(kind: nwl.State.BoundGlobalKind, data:*anyopaque) callconv(.C) void {
+    if (kind != .output) {
+        return;
+    }
+    const output:*nwl.Output = @ptrCast(@alignCast(data));
+    std.log.info("output {?s} destroyed", .{output.name});
     var it = output.state.surfaces.iterator();
     while (it.next()) |surf| {
         const bindsurface = @fieldParentPtr(BindModeSurface, "nwl", surf);
@@ -193,25 +208,22 @@ fn handleDestroyOutput(output:*nwl.Output) callconv(.C) void {
 const SwayBindMode = struct {
     change:[:0]const u8
 };
-const SwayMsg = struct {
-    content:[]u8,
-    msgtype:swayipc.IpcMsgType
-};
 
 fn handleSwayMsg(state:*nwl.State, data:?*const anyopaque) callconv(.C) void {
     var mistate = @fieldParentPtr(ModeIndicatorState, "nwl", state);
     var arena = std.heap.ArenaAllocator.init(mistate.allocator);
     defer arena.deinit();
-    var allocator = arena.allocator();
+    const allocator = arena.allocator();
     // uring passes msg in data
-    var msg:*const SwayMsg = blk: {
+    const msg:*const swayipc.IpcMsg = blk: {
         if (use_uring) {
             break :blk @alignCast(@ptrCast(data));
         } else {
-            break :blk mistate.sway.readMsg(allocator) catch |err| {
+            const msg = mistate.sway.readMsg(allocator) catch |err| {
                 std.log.err("failed parsing sway msg: {s}", .{@errorName(err)});
                 return;
             };
+            break :blk &msg;
         }
     };
     const mode = std.json.parseFromSliceLeaky(SwayBindMode, allocator, msg.content, .{.ignore_unknown_fields = true}) catch return;
@@ -225,17 +237,27 @@ fn handleSwayMsg(state:*nwl.State, data:?*const anyopaque) callconv(.C) void {
         mistate.rec_surface = c.cairo_recording_surface_create(c.CAIRO_CONTENT_COLOR_ALPHA, null);
         renderSurface(mistate.rec_surface.?, mode.change);
     }
-    var rect:c.cairo_rectangle_t = undefined;
-    if (mistate.rec_surface != null) {
-        c.cairo_recording_surface_ink_extents(mistate.rec_surface, &rect.x, &rect.y, &rect.width, &rect.height);
-    }
+    const width:u32 = blk: {
+        if (mistate.rec_surface) |rec_surface| {
+            var rect:c.cairo_rectangle_t = undefined;
+            c.cairo_recording_surface_ink_extents(rec_surface, &rect.x, &rect.y, &rect.width, &rect.height);
+            break :blk @intFromFloat(rect.width);
+        }
+        break :blk 0;
+    };
     var it = state.surfaces.iterator();
     while (it.next()) |surf| {
-        if (mistate.rec_surface != null) {
-            surf.setSize(@intFromFloat(@floor(rect.width)), 32);
-            // Force slam the width here, to work around nwl
-            surf.width = surf.desired_width;
+        if (surf.role_id == .layer) {
+            if (width != 0 and surf.width != width) {
+                surf.setSize(width, 32);
+                // Force slam the width here, to work around nwl
+                surf.width = surf.desired_width;
+            }
+        } else {
+            const misurface = @fieldParentPtr(BindModeSurface, "nwl", surf);
+            initLayerSurface(misurface, width) catch return;
         }
+        surf.commit();
         surf.setNeedDraw(false);
     }
 }
@@ -253,8 +275,8 @@ pub fn main() !void {
         .nwl = .{
             .xdg_app_id = "bindindicator",
             .events = .{
-                .output_new = handleNewOutput,
-                .output_destroy = handleDestroyOutput
+                .global_bound = handleBoundGlobal,
+                .global_destroy = handleDestroyGlobal
             },
             .run_with_zero_surfaces = true,
         }
@@ -271,10 +293,10 @@ pub fn main() !void {
         try multishotPoll(&ring, mistate.nwl.getFd(), std.os.POLL.IN, 0);
         // todo: use provided buffer with a multishot recv.
         var readbuf:[512]u8 = undefined;
-        var buf = std.os.linux.IO_Uring.RecvBuffer{
+        const buf = std.os.linux.IO_Uring.RecvBuffer{
             .buffer = &readbuf
         };
-        while (mistate.nwl.num_surfaces > 0) {
+        while (true) {
             _ = try ring.recv(1, mistate.sway.stream.handle, buf, 0);
             _ = mistate.nwl.wl.display.?.flush();
             _ = try ring.submit_and_wait(1);
@@ -290,7 +312,7 @@ pub fn main() !void {
                         0 => _ = mistate.nwl.dispatch(0),
                         1 => {
                             const header = try swayipc.parseHeader(&readbuf);
-                            const msg = SwayMsg{
+                            const msg = swayipc.IpcMsg{
                                 .msgtype = header.msgtype,
                                 .content = readbuf[14.. header.length+14]
                             };

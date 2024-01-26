@@ -1,7 +1,7 @@
 const std = @import("std");
 const ScanProtocolsStep = @import("zigwayland").ScanProtocolsStep;
 
-pub fn build(b: *std.build.Builder) !void {
+pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
 
     const optimize = b.standardOptimizeOption(.{});
@@ -24,14 +24,14 @@ pub fn build(b: *std.build.Builder) !void {
     const poll = b.option(bool, "poll", "Use a nwl_poll based event loop instead of io_uring") orelse false;
     const opts = b.addOptions();
     opts.addOption(bool, "uring", !poll);
-    exe.addOptions("options", opts);
-    exe.addModule("nwl", nwl.module("nwl"));
-    exe.linkLibrary(nwl.artifact("nwl"));
+    exe.root_module.addAnonymousImport("options", .{
+        .root_source_file = .{.generated = &opts.generated_file}});
+    exe.root_module.addImport("nwl", nwl.module("nwl"));
     exe.linkSystemLibrary("cairo");
     b.installArtifact(exe);
-    exe.addAnonymousModule("sway", .{.source_file = .{.path = "dep/sway.zig" }});
-    exe.addAnonymousModule("wayland", .{
-        .source_file = .{ .generated = &scanner.result}
+    exe.root_module.addAnonymousImport("sway", .{.root_source_file = .{.path = "dep/sway.zig" }});
+    exe.root_module.addAnonymousImport("wayland", .{
+        .root_source_file = .{ .generated = &scanner.result}
     });
     const run_cmd = b.addRunArtifact(exe);
     run_cmd.step.dependOn(b.getInstallStep());

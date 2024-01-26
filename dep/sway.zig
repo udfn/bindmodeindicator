@@ -1,5 +1,7 @@
 const std = @import("std");
 const log = std.log.scoped(.swayipc);
+const native_endian = @import("builtin").cpu.arch.endian();
+
 
 pub const IpcMsgType = enum(u32) {
     MsgRunCommands = 0,
@@ -27,6 +29,7 @@ pub const IpcMsgType = enum(u32) {
     EventTick = ((1 << 31) | 7),
     EventBarStateUpdate = ((1 << 31) | 20),
     EventInput = ((1 << 31) | 21),
+    EventNode = ((1 << 31 | 28)),
     EventClientFilter = ((1 << 31) | 29),
     EventMessage = ((1 << 31 | 30)),
 
@@ -44,6 +47,7 @@ pub const IpcMsgType = enum(u32) {
             .EventInput => "input",
             .EventClientFilter => "clientfilter",
             .EventMessage => "message",
+            .EventNode => "node",
             else => unreachable
         };
         try jw.write(string);
@@ -62,8 +66,8 @@ pub fn parseHeader(msg: []const u8) !IpcMsgHeader {
         return error.InvalidHeader;
     }
     // Check for "i3-ipc"?
-    const length = std.mem.readIntNative(u32, msg[6..10]);
-    const msgtype = std.mem.readIntNative(u32, msg[10..14]);
+    const length = std.mem.readInt(u32, msg[6..10], native_endian);
+    const msgtype = std.mem.readInt(u32, msg[10..14], native_endian);
     return .{ .msgtype = @enumFromInt(msgtype), .length = length };
 }
 
@@ -72,9 +76,9 @@ pub const IpcConnection = struct {
 
     pub fn sendMsg(self: IpcConnection, msgtype: IpcMsgType, payload: ?[]const u8) !void {
         var header: [14]u8 = undefined;
-        std.mem.copy(u8, header[0..], "i3-ipc");
-        std.mem.writeIntNative(u32, header[10..14], @intFromEnum(msgtype));
-        std.mem.writeIntNative(u32, header[6..10], if (payload) |p| @as(u32, @truncate(p.len)) else 0);
+        @memcpy(header[0..6], "i3-ipc");
+        std.mem.writeInt(u32, header[10..14], @intFromEnum(msgtype), native_endian);
+        std.mem.writeInt(u32, header[6..10], if (payload) |p| @as(u32, @truncate(p.len)) else 0, native_endian);
         _ = try self.stream.writeAll(&header);
 
         if (payload) |p| {
@@ -101,7 +105,7 @@ pub const IpcConnection = struct {
             return error.EndOfStream;
         }
         const head = try parseHeader(&headerbuf);
-        var buf = try allocator.alloc(u8, head.length);
+        const buf = try allocator.alloc(u8, head.length);
         errdefer allocator.free(buf);
         if (try self.stream.readAll(buf) != head.length) {
             return error.IncompleteMessage;
