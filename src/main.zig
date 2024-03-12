@@ -310,7 +310,7 @@ pub fn main() !void {
                                 .msgtype = header.msgtype,
                                 .content = readbuf[14.. header.length+14]
                             };
-                            handleSwayMsg(&mistate.nwl, &msg);
+                            handleSwayMsg(&mistate.nwl, std.os.linux.EPOLL.IN, &msg);
                         },
                         else => unreachable,
                     }
