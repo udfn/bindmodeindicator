@@ -1,18 +1,15 @@
 .{
-	.name = "bindmodeindicator",
-	.version = "0.1.0",
-	.paths = .{""},
-	.dependencies = .{
-		.nwl = .{
-				.url = "https://github.com/udfn/nwl/archive/3069aa23bfcdcf41fda5e6faac45ffa32d6373f9.tar.gz",
-				.hash = "1220b59a33f94e6bfb0bf1b3d703f2211ba3a63cf65923c8c3113cadb5124226cf66"
-				// for testing :)
-				//.path = "../nwl"
-		},
-		.zigwayland = .{
-				.url = "https://github.com/udfn/zig-wayland/archive/7a5c469431a7e287bddd5d30492dae5c4bc12e2d.tar.gz",
-				.hash = "12205475c2d6ef3eba2c622c309458a87d341aae2c99239f6a5bf41759f2168f6694"
-				//.path = "../zig-wayland"
-		},
-	}
+    .name = "bindmodeindicator",
+    .version = "0.1.0",
+    .paths = .{""},
+    .dependencies = .{
+        .nwl = .{
+            .url = "https://github.com/udfn/nwl/archive/f5088cc8aad29aee8e9c8925e4b2af36bb18a7cf.tar.gz",
+            .hash = "1220492cd680bffece255d42208ce7ef97d3bd2f00f40e83d0009656c93b362b62b2",
+        },
+        .zigwayland = .{
+            .url = "https://github.com/udfn/zig-wayland/archive/4ada7c78de7c3364b99b5d37b9f223ff1d7f7fe4.tar.gz",
+            .hash = "1220d324362254ed1cb678073d0291638a00c06776e9e379d1f987a6ad4a1b1bb603",
+        },
+    },
 }

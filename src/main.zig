@@ -61,19 +61,19 @@ fn renderSurface(cairo_surface:*c.cairo_surface_t, string:[:0]const u8) void {
     c.cairo_destroy(cr);
 }
 
-fn multiRenderRender(surface:*nwl.Surface) callconv(.C) void {
+fn multiUpdate(surface:*nwl.Surface) callconv(.C) void {
     const mistate = @fieldParentPtr(ModeIndicatorState, "nwl", surface.state);
-    surface.renderer.rendering = true;
-    defer surface.renderer.rendering = false;
+    surface.defer_update = true;
+    defer surface.defer_update = false;
     if (mistate.cur_buffer == null and mistate.rec_surface != null) {
         const scaled_width = surface.width * @as(u32, @intCast(mistate.scale));
         const scaled_height = surface.height * @as(u32, @intCast(mistate.scale));
         if (mistate.bufferman.width != scaled_width) {
-            mistate.bufferman.resize(surface.state, scaled_width, scaled_height, scaled_width*4, 0);
+            mistate.bufferman.resize(surface.state.wl.shm.?, scaled_width, scaled_height, scaled_width*4, 0);
         }
         mistate.cur_buffer = mistate.bufferman.getNext() catch null;
         if (mistate.cur_buffer == null) {
-            mistate.bufferman.setSlots(surface.state, mistate.bufferman.num_slots+1);
+            mistate.bufferman.setSlots(surface.state.wl.shm.?, mistate.bufferman.num_slots+1);
             mistate.cur_buffer = mistate.bufferman.getNext() catch {
                 std.log.err("ARGH! CAN'T GET A BUFFER! Giving up!", .{});
                 surface.state.run_with_zero_surfaces = false;
@@ -92,7 +92,7 @@ fn multiRenderRender(surface:*nwl.Surface) callconv(.C) void {
         c.cairo_paint(cr);
     }
     if (mistate.cur_buffer != null) {
-        surface.swapBuffers(0, 0);
+        renderSwapBuffers(surface, 0, 0);
     } else {
         surface.wl.surface.attach(null, 0, 0);
         surface.unsetRole();
@@ -112,24 +112,18 @@ fn renderSwapBuffers(surface:*nwl.Surface, x:i32, y:i32) callconv(.C) void {
         }
         surface.wl.surface.attach(buf.wl_buffer, 0, 0);
         surface.wl.surface.damageBuffer(0, 0, @as(i32, @intCast(surface.width))*surface.scale, @as(i32, @intCast(surface.height))*surface.scale);
+        surface.bufferSubmitted();
         surface.commit();
     } else {
         std.log.err("BUG BUG BUG! Swap buffers without buffer!", .{});
     }
 }
 
-const MultiSurfaceRenderImpl = nwl.Surface.Renderer.Impl {
-    .apply_size = renderNoOp,
-    .swap_buffers = renderSwapBuffers,
-    .render = multiRenderRender,
-    .destroy = renderNoOp
-};
-
 const BindModeSurface = struct {
     nwl:nwl.Surface = .{
-        .renderer = .{.impl = &MultiSurfaceRenderImpl},
         .impl = .{
-            .destroy = handleSurfaceDestroy
+            .destroy = handleSurfaceDestroy,
+            .update = multiUpdate
         },
         .flags = .{
             .no_autoscale = true
@@ -160,7 +154,6 @@ fn initLayerSurface(surface:*BindModeSurface, width:u32) !void {
     try surface.nwl.roleLayershell(surface.output.output, 3);
     surface.nwl.setSize(width, 32);
     surface.nwl.role.layer.wl.setAnchor(.{.top = true, .left = true});
-
 }
 
 fn handleBoundGlobal(kind: nwl.State.BoundGlobalKind, data:*anyopaque) callconv(.C) void {
@@ -209,7 +202,8 @@ const SwayBindMode = struct {
     change:[:0]const u8
 };
 
-fn handleSwayMsg(state:*nwl.State, data:?*const anyopaque) callconv(.C) void {
+fn handleSwayMsg(state:*nwl.State, events:u32, data:?*const anyopaque) callconv(.C) void {
+    _ = events;
     var mistate = @fieldParentPtr(ModeIndicatorState, "nwl", state);
     var arena = std.heap.ArenaAllocator.init(mistate.allocator);
     defer arena.deinit();
@@ -256,13 +250,13 @@ fn handleSwayMsg(state:*nwl.State, data:?*const anyopaque) callconv(.C) void {
         } else {
             const misurface = @fieldParentPtr(BindModeSurface, "nwl", surf);
             initLayerSurface(misurface, width) catch return;
+            surf.commit();
         }
-        surf.commit();
-        surf.setNeedDraw(false);
+        surf.setNeedUpdate(false);
     }
 }
 
-fn multishotPoll(uring:*std.os.linux.IO_Uring, fd:std.os.fd_t, poll_mask:u32, data:u64) !void {
+fn multishotPoll(uring:*std.os.linux.IoUring, fd:std.os.fd_t, poll_mask:u32, data:u64) !void {
     var sqe = try uring.poll_add(data, fd, poll_mask);
     sqe.len = std.os.linux.IORING_POLL_ADD_MULTI;
 }
@@ -288,12 +282,12 @@ pub fn main() !void {
     defer mistate.bufferman.finish();
     std.log.info("using {s} event loop", .{if (use_uring) "uring" else "nwl_poll"});
     if (use_uring) {
-        var ring = try std.os.linux.IO_Uring.init(8, 0);
+        var ring = try std.os.linux.IoUring.init(8, 0);
         defer ring.deinit();
         try multishotPoll(&ring, mistate.nwl.getFd(), std.os.POLL.IN, 0);
         // todo: use provided buffer with a multishot recv.
         var readbuf:[512]u8 = undefined;
-        const buf = std.os.linux.IO_Uring.RecvBuffer{
+        const buf = std.os.linux.IoUring.RecvBuffer{
             .buffer = &readbuf
         };
         while (true) {
@@ -324,7 +318,7 @@ pub fn main() !void {
             }
         }
     } else {
-        mistate.nwl.addFd(mistate.sway.stream.handle, handleSwayMsg, null);
+        mistate.nwl.addFd(mistate.sway.stream.handle, std.os.linux.EPOLL.IN, handleSwayMsg, null);
         mistate.nwl.run();
     }
 }
