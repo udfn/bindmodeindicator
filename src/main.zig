@@ -256,7 +256,7 @@ fn handleSwayMsg(state:*nwl.State, events:u32, data:?*const anyopaque) callconv(
     }
 }
 
-fn multishotPoll(uring:*std.os.linux.IoUring, fd:std.os.fd_t, poll_mask:u32, data:u64) !void {
+fn multishotPoll(uring:*std.os.linux.IoUring, fd:std.posix.fd_t, poll_mask:u32, data:u64) !void {
     var sqe = try uring.poll_add(data, fd, poll_mask);
     sqe.len = std.os.linux.IORING_POLL_ADD_MULTI;
 }
@@ -284,7 +284,7 @@ pub fn main() !void {
     if (use_uring) {
         var ring = try std.os.linux.IoUring.init(8, 0);
         defer ring.deinit();
-        try multishotPoll(&ring, mistate.nwl.getFd(), std.os.POLL.IN, 0);
+        try multishotPoll(&ring, mistate.nwl.getFd(), std.posix.POLL.IN, 0);
         // todo: use provided buffer with a multishot recv.
         var readbuf:[512]u8 = undefined;
         const buf = std.os.linux.IoUring.RecvBuffer{

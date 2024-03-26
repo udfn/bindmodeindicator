@@ -115,7 +115,7 @@ pub const IpcConnection = struct {
 };
 
 pub fn connect(address: ?[]const u8) !IpcConnection {
-    const swaysock = address orelse std.os.getenv("SWAYSOCK") orelse return error.NoSwaySock;
+    const swaysock = address orelse std.posix.getenv("SWAYSOCK") orelse return error.NoSwaySock;
     const stream = try std.net.connectUnixSocket(swaysock);
     log.info("Connected to {s}", .{swaysock});
     return .{ .stream = stream };
