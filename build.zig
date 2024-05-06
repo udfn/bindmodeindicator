@@ -11,9 +11,9 @@ pub fn build(b: *std.Build) !void {
         .target = target,
     });
 
-    const scanner = ScanProtocolsStep.create(b);
+    const scanner = ScanProtocolsStep.create(b.dependency("zigwayland", .{.no_build = true}).builder);
     scanner.generate("wl_compositor", 5);
-    scanner.addProtocolPath(nwl.builder.pathFromRoot("protocol/wlr-layer-shell-unstable-v1.xml"));
+    scanner.addProtocolPath(nwl.builder.path("protocol/wlr-layer-shell-unstable-v1.xml"));
     scanner.generate("zwlr_layer_shell_v1", 4);
     const exe = b.addExecutable(.{
         .name = "bindmodeindicator",
@@ -30,9 +30,7 @@ pub fn build(b: *std.Build) !void {
     exe.linkSystemLibrary("cairo");
     b.installArtifact(exe);
     exe.root_module.addAnonymousImport("sway", .{.root_source_file = .{.path = "dep/sway.zig" }});
-    exe.root_module.addAnonymousImport("wayland", .{
-        .root_source_file = .{ .generated = &scanner.result}
-    });
+    exe.root_module.addImport("wayland", scanner.module);
     const run_cmd = b.addRunArtifact(exe);
     run_cmd.step.dependOn(b.getInstallStep());
     if (b.args) |args| {

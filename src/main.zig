@@ -21,14 +21,14 @@ const ModeIndicatorState = struct {
 };
 
 fn bufferCreate(buf_idx:c_uint, bufferman:*nwl.ShmBufferMan) callconv(.C) void {
-    const state = @fieldParentPtr(ModeIndicatorState, "bufferman", bufferman);
+    const state:*ModeIndicatorState = @fieldParentPtr("bufferman", bufferman);
     state.cairo_surfaces[buf_idx] = c.cairo_image_surface_create_for_data(bufferman.buffers[buf_idx].bufferdata,
         c.CAIRO_FORMAT_ARGB32, @intCast(bufferman.width),
         @intCast(bufferman.height), @intCast(bufferman.stride)).?;
 }
 
 fn bufferDestroy(buf_idx:c_uint, bufferman:*nwl.ShmBufferMan) callconv(.C) void {
-    const state = @fieldParentPtr(ModeIndicatorState, "bufferman", bufferman);
+    const state:*ModeIndicatorState = @fieldParentPtr("bufferman", bufferman);
     c.cairo_surface_destroy(state.cairo_surfaces[buf_idx]);
 }
 
@@ -62,7 +62,7 @@ fn renderSurface(cairo_surface:*c.cairo_surface_t, string:[:0]const u8) void {
 }
 
 fn multiUpdate(surface:*nwl.Surface) callconv(.C) void {
-    const mistate = @fieldParentPtr(ModeIndicatorState, "nwl", surface.state);
+    const mistate:*ModeIndicatorState = @fieldParentPtr("nwl", surface.state);
     surface.defer_update = true;
     defer surface.defer_update = false;
     if (mistate.cur_buffer == null and mistate.rec_surface != null) {
@@ -103,7 +103,7 @@ fn multiUpdate(surface:*nwl.Surface) callconv(.C) void {
 fn renderSwapBuffers(surface:*nwl.Surface, x:i32, y:i32) callconv(.C) void {
     _ = x;
     _ = y;
-    var mistate = @fieldParentPtr(ModeIndicatorState, "nwl", surface.state);
+    var mistate:*ModeIndicatorState = @fieldParentPtr("nwl", surface.state);
     if (mistate.cur_buffer) |buf_idx| {
         const buf = &mistate.bufferman.buffers[buf_idx];
         if (mistate.scale != surface.scale) {
@@ -133,8 +133,8 @@ const BindModeSurface = struct {
 };
 
 fn handleSurfaceDestroy(surface:*nwl.Surface) callconv(.C) void {
-    const state = @fieldParentPtr(ModeIndicatorState, "nwl", surface.state);
-    const bindsurface = @fieldParentPtr(BindModeSurface, "nwl", surface);
+    const state:*ModeIndicatorState = @fieldParentPtr("nwl", surface.state);
+    const bindsurface:*BindModeSurface = @fieldParentPtr("nwl", surface);
     state.allocator.destroy(bindsurface);
 }
 
@@ -162,7 +162,7 @@ fn handleBoundGlobal(kind: nwl.State.BoundGlobalKind, data:*anyopaque) callconv(
     }
     const output:*nwl.Output = @ptrCast(@alignCast(data));
     std.log.info("output {?s} created", .{output.name});
-    const mistate = @fieldParentPtr(ModeIndicatorState, "nwl", output.state);
+    const mistate:*ModeIndicatorState = @fieldParentPtr("nwl", output.state);
     if (output.scale > mistate.scale) {
         mistate.scale = output.scale;
     }
@@ -179,14 +179,14 @@ fn handleDestroyGlobal(kind: nwl.State.BoundGlobalKind, data:*anyopaque) callcon
     std.log.info("output {?s} destroyed", .{output.name});
     var it = output.state.surfaces.iterator();
     while (it.next()) |surf| {
-        const bindsurface = @fieldParentPtr(BindModeSurface, "nwl", surf);
+        const bindsurface:*BindModeSurface = @fieldParentPtr("nwl", surf);
         if (bindsurface.output == output) {
             surf.destroyLater();
             break;
         }
     }
     var oit = output.state.outputs.iterator();
-    const mistate = @fieldParentPtr(ModeIndicatorState, "nwl", output.state);
+    const mistate:*ModeIndicatorState = @fieldParentPtr("nwl", output.state);
     mistate.scale = 1;
     while (oit.next()) |o| {
         if (o == output) {
@@ -204,7 +204,7 @@ const SwayBindMode = struct {
 
 fn handleSwayMsg(state:*nwl.State, events:u32, data:?*const anyopaque) callconv(.C) void {
     _ = events;
-    var mistate = @fieldParentPtr(ModeIndicatorState, "nwl", state);
+    var mistate:*ModeIndicatorState = @fieldParentPtr("nwl", state);
     var arena = std.heap.ArenaAllocator.init(mistate.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
@@ -248,7 +248,7 @@ fn handleSwayMsg(state:*nwl.State, events:u32, data:?*const anyopaque) callconv(
                 surf.width = surf.desired_width;
             }
         } else {
-            const misurface = @fieldParentPtr(BindModeSurface, "nwl", surf);
+            const misurface:*BindModeSurface = @fieldParentPtr("nwl", surf);
             initLayerSurface(misurface, width) catch return;
             surf.commit();
         }
