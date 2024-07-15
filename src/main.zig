@@ -145,11 +145,11 @@ fn initLayerSurface(surface: *BindModeSurface, width: u32) !void {
     surface.nwl.role.layer.wl.setAnchor(.{ .top = true, .left = true });
 }
 
-fn handleBoundGlobal(kind: nwl.State.BoundGlobalKind, data: *anyopaque) callconv(.C) void {
-    if (kind != .output) {
+fn handleBoundGlobal(global: *const nwl.State.BoundGlobal) callconv(.C) void {
+    if (global.kind != .output) {
         return;
     }
-    const output: *nwl.Output = @ptrCast(@alignCast(data));
+    const output: *nwl.Output = global.global.output;
     std.log.info("output {?s} created", .{output.name});
     const mistate: *ModeIndicatorState = @fieldParentPtr("nwl", output.state);
     if (output.scale > mistate.scale) {
@@ -160,11 +160,11 @@ fn handleBoundGlobal(kind: nwl.State.BoundGlobalKind, data: *anyopaque) callconv
     };
 }
 
-fn handleDestroyGlobal(kind: nwl.State.BoundGlobalKind, data: *anyopaque) callconv(.C) void {
-    if (kind != .output) {
+fn handleDestroyGlobal(global: *const nwl.State.BoundGlobal) callconv(.C) void {
+    if (global.kind != .output) {
         return;
     }
-    const output: *nwl.Output = @ptrCast(@alignCast(data));
+    const output: *nwl.Output = global.global.output;
     std.log.info("output {?s} destroyed", .{output.name});
     var it = output.state.surfaces.iterator();
     while (it.next()) |surf| {

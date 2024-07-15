@@ -13,11 +13,11 @@ pub fn build(b: *std.Build) !void {
 
     const scanner = ScanProtocolsStep.create(b.dependency("zigwayland", .{.no_build = true}).builder);
     scanner.generate("wl_compositor", 5);
-    scanner.addProtocolPath(nwl.builder.path("protocol/wlr-layer-shell-unstable-v1.xml"));
+    scanner.addProtocolPath(nwl.builder.path("protocol/wlr-layer-shell-unstable-v1.xml"), true);
     scanner.generate("zwlr_layer_shell_v1", 4);
     const exe = b.addExecutable(.{
         .name = "bindmodeindicator",
-        .root_source_file = .{ .path = "src/main.zig"},
+        .root_source_file = b.path("src/main.zig"),
         .optimize = optimize,
         .target = target
     });
@@ -25,11 +25,11 @@ pub fn build(b: *std.Build) !void {
     const opts = b.addOptions();
     opts.addOption(bool, "uring", !poll);
     exe.root_module.addAnonymousImport("options", .{
-        .root_source_file = .{.generated = &opts.generated_file}});
+        .root_source_file = .{.generated = .{.file = &opts.generated_file}}});
     exe.root_module.addImport("nwl", nwl.module("nwl"));
     exe.linkSystemLibrary("cairo");
     b.installArtifact(exe);
-    exe.root_module.addAnonymousImport("sway", .{.root_source_file = .{.path = "dep/sway.zig" }});
+    exe.root_module.addAnonymousImport("sway", .{.root_source_file = b.path("dep/sway.zig")});
     exe.root_module.addImport("wayland", scanner.module);
     const run_cmd = b.addRunArtifact(exe);
     run_cmd.step.dependOn(b.getInstallStep());
