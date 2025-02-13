@@ -4,12 +4,12 @@
     .paths = .{""},
     .dependencies = .{
         .nwl = .{
-            .url = "https://github.com/udfn/nwl/archive/91837c5dfefcb5a61557a6b5ba2cc954c07228bd.tar.gz",
-            .hash = "1220765db4a438edc69c75b0a3f0612f1038673a6f4ed1a025a2cb502b66d111a93e",
+            .url = "git+https://github.com/udfn/nwl.git?ref=master#800f9e98c9206fa13e54cac0e1630379262e2557",
+            .hash = "1220b5535f8583e83729fd5fa7eec64991cbdb8d127b72ca25837cf31a8dd7ec382d"
         },
         .zigwayland = .{
-            .url = "https://github.com/udfn/zig-wayland/archive/fdc3ac7eed0e0d602f700db35a8309a67aa711b7.tar.gz",
-            .hash = "12201f789bc6aa23962daa73ccc9fec6d1b2b595857f21fac401f1a002a6ad385533",
+            .url = "https://github.com/udfn/zig-wayland/archive/8aee5d8ed778122b838e9bab555640cc7087b965.tar.gz",
+            .hash = "1220c0dd5ed34d0817b677846eeec2632d77fe70121d7ac38cffa0d72530320e2a58",
         },
     },
 }
