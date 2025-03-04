@@ -1,12 +1,10 @@
 .{
-    .name = "bindmodeindicator",
+    .name = .bindmodeindicator,
     .version = "0.1.0",
+    .fingerprint = 0x43d702434027439f,
     .paths = .{""},
     .dependencies = .{
-        .nwl = .{
-            .url = "git+https://github.com/udfn/nwl.git?ref=master#800f9e98c9206fa13e54cac0e1630379262e2557",
-            .hash = "1220b5535f8583e83729fd5fa7eec64991cbdb8d127b72ca25837cf31a8dd7ec382d"
-        },
+        .nwl = .{ .url = "git+https://github.com/udfn/nwl.git?ref=master#e5188a601add90f4a536d8e61c6b8c42f269b3be", .hash = "nwl-0.5.0-uTXiTTNAAgAC7RkszrvORP7IT4EfEkP9JuKbOfd0yW4O", },
         .zigwayland = .{
             .url = "https://github.com/udfn/zig-wayland/archive/8aee5d8ed778122b838e9bab555640cc7087b965.tar.gz",
             .hash = "1220c0dd5ed34d0817b677846eeec2632d77fe70121d7ac38cffa0d72530320e2a58",
