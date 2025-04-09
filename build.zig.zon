@@ -4,10 +4,13 @@
     .fingerprint = 0x43d702434027439f,
     .paths = .{""},
     .dependencies = .{
-        .nwl = .{ .url = "git+https://github.com/udfn/nwl.git?ref=master#e5188a601add90f4a536d8e61c6b8c42f269b3be", .hash = "nwl-0.5.0-uTXiTTNAAgAC7RkszrvORP7IT4EfEkP9JuKbOfd0yW4O", },
+        .nwl = .{
+            .url = "git+https://github.com/udfn/nwl.git?ref=master#d4d9d041c997c420cb2e61c14ce236a7e8c1492e",
+            .hash = "nwl-0.5.0-uTXiTYJAAgAsQm4K5Ry7tvvrAs-RIZD1bl4ZE6kpVwU9",
+        },
         .zigwayland = .{
-            .url = "https://github.com/udfn/zig-wayland/archive/8aee5d8ed778122b838e9bab555640cc7087b965.tar.gz",
-            .hash = "1220c0dd5ed34d0817b677846eeec2632d77fe70121d7ac38cffa0d72530320e2a58",
+            .url = "git+https://github.com/udfn/zig-wayland.git?ref=zig14-experimental#25ef86c89add7ad85ea09b8341a9e57f7054783e",
+            .hash = "zig_wayland_experimental-0.0.0-Flcz_YUcBABA7YyxwAhTlW6pI5GYreem8zwjY5g1oQEA",
         },
     },
 }
