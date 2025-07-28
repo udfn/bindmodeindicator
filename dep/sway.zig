@@ -2,55 +2,86 @@ const std = @import("std");
 const log = std.log.scoped(.swayipc);
 const native_endian = @import("builtin").cpu.arch.endian();
 
+pub const IpcMsgType = packed struct(u32) {
+    pub const Msg = enum(u30) {
+        RunCommands = 0,
+        GetWorkspaces = 1,
+        Subscribe = 2,
+        GetOutputs,
+        GetTree,
+        GetMarks,
+        GetBarConfig,
+        GetVersion,
+        GetBindingModes,
+        GetConfig,
+        SendTick,
+        Sync,
+        GetBindingState,
+        GetInputs = 100,
+        GetSeats = 101,
+    };
+    pub const Event = enum(u30) {
+        Workspace = 0,
+        Output = 1,
+        Mode = 2,
+        Window = 3,
+        BarConfigUpdate = 4,
+        Binding = 5,
+        Shutdown = 6,
+        Tick = 7,
+        Lock = 15,
+        BarStateUpdate = 20,
+        Input = 21,
+        Node = 28,
+        ClientFilter = 29,
+        Message = 30,
 
-pub const IpcMsgType = enum(u32) {
-    MsgRunCommands = 0,
-    MsgGetWorkspaces = 1,
-    MsgSubscribe = 2,
-    MsgGetOutputs,
-    MsgGetTree,
-    MsgGetMarks,
-    MsgGetBarConfig,
-    MsgGetVersion,
-    MsgGetBindingModes,
-    MsgGetConfig,
-    MsgSendTick,
-    MsgSync,
-    MsgGetBindingState,
-    MsgGetInputs = 100,
-    MsgGetSeats = 101,
-    EventWorkspace = ((1 << 31) | 0),
-    EventOutput = ((1 << 31) | 1),
-    EventMode = ((1 << 31) | 2),
-    EventWindow = ((1 << 31) | 3),
-    EventBarConfigUpdate = ((1 << 31) | 4),
-    EventBinding = ((1 << 31) | 5),
-    EventShutdown = ((1 << 31) | 6),
-    EventTick = ((1 << 31) | 7),
-    EventBarStateUpdate = ((1 << 31) | 20),
-    EventInput = ((1 << 31) | 21),
-    EventNode = ((1 << 31 | 28)),
-    EventClientFilter = ((1 << 31) | 29),
-    EventMessage = ((1 << 31 | 30)),
+        pub fn jsonStringify(self: Event, jw: anytype) !void {
+            const string = switch (self) {
+                .Workspace => "workspace",
+                .Output => "output",
+                .Mode => "mode",
+                .Window => "window",
+                .BarConfigUpdate => "barconfig_update",
+                .Binding => "binding",
+                .Shutdown => "shutdown",
+                .Tick => "tick",
+                .BarStateUpdate => "bar_state_update",
+                .Input => "input",
+                .ClientFilter => "clientfilter",
+                .Message => "message",
+                .Node => "node",
+                .Lock => "lock",
+            };
+            try jw.write(string);
+        }
 
-    pub fn jsonStringify(self: IpcMsgType, jw: anytype) !void {
-        const string = switch (self) {
-            .EventWorkspace => "workspace",
-            .EventOutput => "output",
-            .EventMode => "mode",
-            .EventWindow => "window",
-            .EventBarConfigUpdate => "barconfig_update",
-            .EventBinding => "binding",
-            .EventShutdown => "shutdown",
-            .EventTick => "tick",
-            .EventBarStateUpdate => "bar_state_update",
-            .EventInput => "input",
-            .EventClientFilter => "clientfilter",
-            .EventMessage => "message",
-            .EventNode => "node",
-            else => unreachable
-        };
-        try jw.write(string);
+        pub fn toUint(self: Event) u32 {
+            return @as(u32, @intCast(@intFromEnum(self))) | (1 << 31);
+        }
+    };
+
+    pub const Kind = enum(u2) {
+        msg = 0,
+        event = 2,
+    };
+    type: packed union {
+        msg: Msg,
+        event: Event,
+    },
+    kind: Kind,
+
+    pub fn format(value: IpcMsgType, writer: *std.Io.Writer) !void {
+        switch (value.kind) {
+            .msg => {
+                try writer.writeAll("msg:");
+                try writer.writeAll(@tagName(value.type.msg));
+            },
+            .event => {
+                try writer.writeAll("event:");
+                try writer.writeAll(@tagName(value.type.event));
+            },
+        }
     }
 };
 
@@ -68,55 +99,57 @@ pub fn parseHeader(msg: []const u8) !IpcMsgHeader {
     // Check for "i3-ipc"?
     const length = std.mem.readInt(u32, msg[6..10], native_endian);
     const msgtype = std.mem.readInt(u32, msg[10..14], native_endian);
-    return .{ .msgtype = @enumFromInt(msgtype), .length = length };
+    return .{ .msgtype = @bitCast(msgtype), .length = length };
 }
 
 pub const IpcConnection = struct {
-    stream: std.net.Stream,
+    reader: std.net.Stream.Reader,
 
-    pub fn sendMsg(self: IpcConnection, msgtype: IpcMsgType, payload: ?[]const u8) !void {
+    fn writeHeader(dest: []u8, msgtype: IpcMsgType, payload_len: u32) void {
+        @memcpy(dest[0..6], "i3-ipc");
+        std.mem.writeInt(u32, dest[10..14], @bitCast(msgtype), native_endian);
+        std.mem.writeInt(u32, dest[6..10], payload_len, native_endian);
+    }
+
+    pub fn sendMsg(self: *IpcConnection, msgtype: IpcMsgType.Msg, payload: ?[]const u8) !void {
         var header: [14]u8 = undefined;
-        @memcpy(header[0..6], "i3-ipc");
-        std.mem.writeInt(u32, header[10..14], @intFromEnum(msgtype), native_endian);
-        std.mem.writeInt(u32, header[6..10], if (payload) |p| @as(u32, @truncate(p.len)) else 0, native_endian);
-        _ = try self.stream.writeAll(&header);
+        writeHeader(&header, .{ .type = .{ .msg = msgtype }, .kind = .msg }, if (payload) |p| @intCast(p.len) else 0);
 
         if (payload) |p| {
-            _ = try self.stream.writeAll(p[0..]);
-            log.info("Sent {s} \"{s}\"", .{ @tagName(msgtype), p });
+            var writer = self.reader.getStream().writer(&.{});
+            _ = try writer.interface.writeVec(&.{ &header, p });
+            log.info("Sent {t} \"{s}\"", .{ msgtype, p });
+        } else {
+            _ = try self.reader.getStream().writeAll(&header);
+            log.info("Sent {t}", .{msgtype});
         }
     }
 
-    pub fn subscribe(self: IpcConnection, events: []const IpcMsgType) !void {
+    pub fn subscribe(self: *IpcConnection, events: []const IpcMsgType.Event) !void {
         var buf: [512]u8 = undefined;
-        var fbs = std.io.fixedBufferStream(&buf);
-        try std.json.stringify(events, .{}, fbs.writer());
-        try self.sendMsg(.MsgSubscribe, fbs.getWritten());
+        var fbs = std.Io.Writer.fixed(&buf);
+        var stringer: std.json.Stringify = .{ .writer = &fbs };
+        try stringer.write(events);
+        try self.sendMsg(.Subscribe, buf[0..fbs.end]);
     }
 
-    pub fn sendMsgWait(self: IpcConnection, allocator: std.mem.Allocator, msgtype: IpcMsgType, payload: ?[]const u8) !IpcMsg {
+    pub fn sendMsgWait(self: *IpcConnection, allocator: std.mem.Allocator, msgtype: IpcMsgType.Msg, payload: ?[]const u8) !IpcMsg {
         try self.sendMsg(msgtype, payload);
         return try self.readMsg(allocator);
     }
 
-    pub fn readMsg(self: IpcConnection, allocator: std.mem.Allocator) !IpcMsg {
+    pub fn readMsg(self: *IpcConnection, allocator: std.mem.Allocator) !IpcMsg {
         var headerbuf: [14]u8 = undefined;
-        if (try self.stream.readAll(&headerbuf) != 14) {
-            return error.EndOfStream;
-        }
+        try self.reader.interface().readSliceAll(&headerbuf);
         const head = try parseHeader(&headerbuf);
-        const buf = try allocator.alloc(u8, head.length);
-        errdefer allocator.free(buf);
-        if (try self.stream.readAll(buf) != head.length) {
-            return error.IncompleteMessage;
-        }
-        return .{ .msgtype = head.msgtype, .content = buf };
+        const content = try self.reader.interface().readAlloc(allocator, head.length);
+        return .{ .msgtype = head.msgtype, .content = content };
     }
 };
 
-pub fn connect(address: ?[]const u8) !IpcConnection {
+pub fn connect(address: ?[]const u8, read_buffer: []u8) !IpcConnection {
     const swaysock = address orelse std.posix.getenv("SWAYSOCK") orelse return error.NoSwaySock;
     const stream = try std.net.connectUnixSocket(swaysock);
     log.info("Connected to {s}", .{swaysock});
-    return .{ .stream = stream };
+    return .{ .reader = stream.reader(read_buffer) };
 }
