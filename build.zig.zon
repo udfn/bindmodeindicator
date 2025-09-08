@@ -5,8 +5,8 @@
     .paths = .{""},
     .dependencies = .{
         .zigwayland = .{
-            .url = "git+https://github.com/udfn/zig-wayland.git?ref=zig14-experimental#ad5ce863a63361d37dac683eb8e231bfe0c29852",
-            .hash = "zig_wayland_experimental-0.0.0-Flcz_dclBACBuKHOlWIuMEe1qSrUeSrcwNi1C5mt2LRR",
+            .url = "git+https://github.com/udfn/zig-wayland.git?ref=zig14-experimental#0ee87917acffed2abc4edfeda0633c8cddaeb8ab",
+            .hash = "zig_wayland_experimental-0.0.0-Flcz_YslBACUGUXH7v3bNgubIzvMPdkkG3pL0OeIjb0R",
         },
         .nwl = .{
             .url = "git+https://github.com/udfn/nwl.git?ref=master#6c7ab406d62d7baf7f710a04746597da68729cf7",
