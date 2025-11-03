@@ -87,7 +87,7 @@ pub const IpcMsgType = packed struct(u32) {
 
 pub const IpcMsg = struct {
     msgtype: IpcMsgType,
-    content: []u8,
+    content: []const u8,
 };
 
 pub const IpcMsgHeader = struct { msgtype: IpcMsgType, length: usize };
@@ -103,7 +103,7 @@ pub fn parseHeader(msg: []const u8) !IpcMsgHeader {
 }
 
 pub const IpcConnection = struct {
-    reader: std.net.Stream.Reader,
+    reader: std.Io.net.Stream.Reader,
 
     fn writeHeader(dest: []u8, msgtype: IpcMsgType, payload_len: u32) void {
         @memcpy(dest[0..6], "i3-ipc");
@@ -114,13 +114,12 @@ pub const IpcConnection = struct {
     pub fn sendMsg(self: *IpcConnection, msgtype: IpcMsgType.Msg, payload: ?[]const u8) !void {
         var header: [14]u8 = undefined;
         writeHeader(&header, .{ .type = .{ .msg = msgtype }, .kind = .msg }, if (payload) |p| @intCast(p.len) else 0);
-
+        var writer = self.reader.stream.writer(self.reader.io, &.{});
         if (payload) |p| {
-            var writer = self.reader.getStream().writer(&.{});
             _ = try writer.interface.writeVec(&.{ &header, p });
             log.info("Sent {t} \"{s}\"", .{ msgtype, p });
         } else {
-            _ = try self.reader.getStream().writeAll(&header);
+            _ = try writer.interface.writeVec(&.{&header});
             log.info("Sent {t}", .{msgtype});
         }
     }
@@ -140,16 +139,17 @@ pub const IpcConnection = struct {
 
     pub fn readMsg(self: *IpcConnection, allocator: std.mem.Allocator) !IpcMsg {
         var headerbuf: [14]u8 = undefined;
-        try self.reader.interface().readSliceAll(&headerbuf);
+        try self.reader.interface.readSliceAll(&headerbuf);
         const head = try parseHeader(&headerbuf);
-        const content = try self.reader.interface().readAlloc(allocator, head.length);
+        const content = try self.reader.interface.readAlloc(allocator, head.length);
         return .{ .msgtype = head.msgtype, .content = content };
     }
 };
 
-pub fn connect(address: ?[]const u8, read_buffer: []u8) !IpcConnection {
+pub fn connect(io: std.Io, address: ?[]const u8, read_buffer: []u8) !IpcConnection {
     const swaysock = address orelse std.posix.getenv("SWAYSOCK") orelse return error.NoSwaySock;
-    const stream = try std.net.connectUnixSocket(swaysock);
+    const uaddress = try std.Io.net.UnixAddress.init(swaysock);
+    var stream = try uaddress.connect(io);
     log.info("Connected to {s}", .{swaysock});
-    return .{ .reader = stream.reader(read_buffer) };
+    return .{ .reader = stream.reader(io, read_buffer) };
 }

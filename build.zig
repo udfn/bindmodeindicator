@@ -11,24 +11,23 @@ pub fn build(b: *std.Build) !void {
         .dynamic = optimize == .Debug,
     });
 
-    const scanner = ScanProtocolsStep.create(b.dependency("zigwayland", .{.no_build = true}).builder);
-    scanner.generate("wl_compositor", 5);
+    const scanner = ScanProtocolsStep.create(b.dependency("zigwayland", .{ .no_build = true }).builder);
     scanner.addProtocolPath(nwl.builder.path("protocol/wlr-layer-shell-unstable-v1.xml"), false);
+    scanner.generate("wl_compositor", 5);
     scanner.generate("zwlr_layer_shell_v1", 4);
     const bmi = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
         .optimize = optimize,
         .target = target,
+        .single_threaded = true,
+        .imports = &.{
+            .{ .name = "nwl", .module = nwl.module("nwl") },
+            .{ .name = "wayland", .module = scanner.module },
+            .{ .name = "sway", .module = b.createModule(.{ .root_source_file = b.path("dep/sway.zig") }) },
+        },
     });
-    const poll = b.option(bool, "poll", "Use a nwl_poll based event loop instead of io_uring") orelse false;
-    const opts = b.addOptions();
-    opts.addOption(bool, "uring", !poll);
-    bmi.addImport("options", opts.createModule());
-    bmi.addImport("nwl", nwl.module("nwl"));
-    bmi.linkSystemLibrary("cairo", .{});
     bmi.linkSystemLibrary("wayland-client", .{});
-    bmi.addAnonymousImport("sway", .{.root_source_file = b.path("dep/sway.zig")});
-    bmi.addImport("wayland", scanner.module);
+    bmi.linkSystemLibrary("cairo", .{});
     const exe = b.addExecutable(.{
         .name = "bindmodeindicator",
         .root_module = bmi,

@@ -1,7 +1,6 @@
 const std = @import("std");
 const nwl = @import("nwl");
 const swayipc = @import("sway");
-const use_uring = @import("options").uring;
 pub const wayland = @import("wayland");
 const c = @cImport(@cInclude("cairo.h"));
 
@@ -194,23 +193,18 @@ fn handleDestroyGlobal(global: *const nwl.Easy.BoundGlobal) callconv(.c) void {
 
 const SwayBindMode = struct { change: [:0]const u8 };
 
-fn handleSwayMsg(state: *nwl.Easy, events: u32, data: ?*const anyopaque) callconv(.c) void {
+fn handleSwayMsg(state: *nwl.Easy, events: u32, _: ?*const anyopaque) callconv(.c) void {
     _ = events;
     var mistate: *ModeIndicatorState = @fieldParentPtr("nwl", state);
     var arena = std.heap.ArenaAllocator.init(mistate.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
-    // uring passes msg in data
     const msg: *const swayipc.IpcMsg = blk: {
-        if (use_uring) {
-            break :blk @alignCast(@ptrCast(data));
-        } else {
-            const msg = mistate.sway.readMsg(allocator) catch |err| {
-                std.log.err("failed parsing sway msg: {s}", .{@errorName(err)});
-                return;
-            };
-            break :blk &msg;
-        }
+        const msg = mistate.sway.readMsg(allocator) catch |err| {
+            std.log.err("failed parsing sway msg: {s}", .{@errorName(err)});
+            return;
+        };
+        break :blk &msg;
     };
     const mode = std.json.parseFromSliceLeaky(SwayBindMode, allocator, msg.content, .{ .ignore_unknown_fields = true }) catch return;
     if (mistate.rec_surface != null) {
@@ -253,61 +247,27 @@ fn multishotPoll(uring: *std.os.linux.IoUring, fd: std.posix.fd_t, poll_mask: u3
     sqe.len = std.os.linux.IORING_POLL_ADD_MULTI;
 }
 
+var io_impl: std.Io.Threaded = .init_single_threaded;
+
 pub fn main() !void {
     var ipc_buf: [512]u8 = undefined;
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    var mistate = ModeIndicatorState{ .allocator = gpa.allocator(), .sway = try swayipc.connect(null, &ipc_buf), .nwl = .{
-        .core = .{
-            .xdg_app_id = "bindindicator",
+    var mistate = ModeIndicatorState{
+        .allocator = gpa.allocator(),
+        .sway = try swayipc.connect(io_impl.io(), null, &ipc_buf),
+        .nwl = .{
+            .core = .{
+                .xdg_app_id = "bindindicator",
+            },
+            .events = .{ .global_bound = handleBoundGlobal, .global_destroy = handleDestroyGlobal },
+            .run_with_zero_surfaces = true,
         },
-        .events = .{ .global_bound = handleBoundGlobal, .global_destroy = handleDestroyGlobal },
-        .run_with_zero_surfaces = true,
-    } };
+    };
     defer _ = gpa.deinit();
     try mistate.sway.subscribe(&.{.Mode});
     try mistate.nwl.init();
     defer mistate.nwl.deinit();
     defer mistate.bufferman.finish();
-    std.log.debug("using {s} event loop", .{if (use_uring) "uring" else "nwl_poll"});
-    if (use_uring) {
-        var ring = try std.os.linux.IoUring.init(8, 0);
-        defer ring.deinit();
-        try multishotPoll(&ring, mistate.nwl.poll.epfd, std.posix.POLL.IN, 0);
-        // todo: use provided buffer with a multishot recv.
-        var readbuf: [512]u8 = undefined;
-        const buf = std.os.linux.IoUring.RecvBuffer{ .buffer = &readbuf };
-        while (true) {
-            _ = try ring.recv(1, mistate.sway.reader.getStream().handle, buf, 0);
-            _ = mistate.nwl.display.flush();
-            _ = try ring.submit_and_wait(1);
-            const numevents = ring.cq_ready();
-            if (numevents > 0) {
-                var cqes: [8]std.os.linux.io_uring_cqe = undefined;
-                const numcopied = try ring.copy_cqes(&cqes, 0);
-                for (cqes[0..numcopied]) |cqe| {
-                    if (cqe.err() != .SUCCESS) {
-                        break;
-                    }
-                    switch (cqe.user_data) {
-                        0 => _ = try mistate.nwl.dispatch(0),
-                        1 => {
-                            const header = try swayipc.parseHeader(&readbuf);
-                            const msg = swayipc.IpcMsg{
-                                .msgtype = header.msgtype,
-                                .content = readbuf[14 .. header.length + 14],
-                            };
-                            handleSwayMsg(&mistate.nwl, std.os.linux.EPOLL.IN, &msg);
-                            if (mistate.nwl.core.has_dirty_surfaces) {
-                                mistate.nwl.core.handleDirt();
-                            }
-                        },
-                        else => unreachable,
-                    }
-                }
-            }
-        }
-    } else {
-        mistate.nwl.addFd(mistate.sway.reader.getStream().handle, std.os.linux.EPOLL.IN, handleSwayMsg, null);
-        mistate.nwl.run();
-    }
+    mistate.nwl.addFd(mistate.sway.reader.stream.socket.handle, std.os.linux.EPOLL.IN, handleSwayMsg, null);
+    mistate.nwl.run();
 }
