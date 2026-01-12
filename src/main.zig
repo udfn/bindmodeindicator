@@ -249,12 +249,12 @@ fn multishotPoll(uring: *std.os.linux.IoUring, fd: std.posix.fd_t, poll_mask: u3
 
 var io_impl: std.Io.Threaded = .init_single_threaded;
 
-pub fn main() !void {
+pub fn main(init: std.process.Init.Minimal) !void {
     var ipc_buf: [512]u8 = undefined;
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     var mistate = ModeIndicatorState{
         .allocator = gpa.allocator(),
-        .sway = try swayipc.connect(io_impl.io(), null, &ipc_buf),
+        .sway = try swayipc.connect(io_impl.io(), &init.environ, null, &ipc_buf),
         .nwl = .{
             .core = .{
                 .xdg_app_id = "bindindicator",

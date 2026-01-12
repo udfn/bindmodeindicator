@@ -146,8 +146,8 @@ pub const IpcConnection = struct {
     }
 };
 
-pub fn connect(io: std.Io, address: ?[]const u8, read_buffer: []u8) !IpcConnection {
-    const swaysock = address orelse std.posix.getenv("SWAYSOCK") orelse return error.NoSwaySock;
+pub fn connect(io: std.Io, env: *const std.process.Environ, address: ?[]const u8, read_buffer: []u8) !IpcConnection {
+    const swaysock = address orelse env.getPosix("SWAYSOCK") orelse return error.NoSwaySock;
     const uaddress = try std.Io.net.UnixAddress.init(swaysock);
     var stream = try uaddress.connect(io);
     log.info("Connected to {s}", .{swaysock});
