@@ -9,8 +9,8 @@
             .hash = "zig_wayland_experimental-0.0.0-Flcz_T4nBABIAaEcwJDqqOLBJnl1um5B3fK8lXi3bpwZ",
         },
         .nwl = .{
-            .url = "git+https://github.com/udfn/nwl.git?ref=master#0730afff5dbf530ec22cfafbba2ce45ed11dff8e",
-            .hash = "nwl-0.5.0-uTXiTco2AgBu-Q-rs9S2lvarbxoRL2GWr8p4lk0RV7PM",
+            .url = "git+https://github.com/udfn/nwl.git?ref=master#5f3f03943305d63bda728b64a6aec9a397a82ee0",
+            .hash = "nwl-0.5.0-uTXiTUU3AgAMOq5SU8RfNg9vOcBOkz_8m3Lzl9DG_Qal",
         },
     },
 }
