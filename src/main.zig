@@ -242,18 +242,11 @@ fn handleSwayMsg(state: *nwl.Easy, events: u32, _: ?*const anyopaque) callconv(.
     }
 }
 
-fn multishotPoll(uring: *std.os.linux.IoUring, fd: std.posix.fd_t, poll_mask: u32, data: u64) !void {
-    var sqe = try uring.poll_add(data, fd, poll_mask);
-    sqe.len = std.os.linux.IORING_POLL_ADD_MULTI;
-}
-
-var io_impl: std.Io.Threaded = .init_single_threaded;
-
 pub fn main(init: std.process.Init) !void {
     var ipc_buf: [512]u8 = undefined;
     var mistate = ModeIndicatorState{
         .allocator = init.gpa,
-        .sway = try swayipc.connect(io_impl.io(), &init.minimal.environ, null, &ipc_buf),
+        .sway = try swayipc.connect(init.io, &init.minimal.environ, null, &ipc_buf),
         .nwl = .{
             .core = .{
                 .xdg_app_id = "bindindicator",
