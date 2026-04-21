@@ -1,5 +1,5 @@
 const std = @import("std");
-const ScanProtocolsStep = @import("zigwayland").ScanProtocolsStep;
+const Scanner = @import("zigwayland").Scanner;
 
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
@@ -11,10 +11,17 @@ pub fn build(b: *std.Build) !void {
         .dynamic = optimize == .Debug,
     });
 
-    const scanner = ScanProtocolsStep.create(b.dependency("zigwayland", .{ .no_build = true }).builder);
-    scanner.addProtocolPath(nwl.builder.path("protocol/wlr-layer-shell-unstable-v1.xml"), false);
+    const scanner = Scanner.create(b, .{});
+    scanner.addCustomProtocol(nwl.builder.path("protocol/wlr-layer-shell-unstable-v1.xml"));
     scanner.generate("wl_compositor", 5);
     scanner.generate("zwlr_layer_shell_v1", 4);
+
+    const c_mod = b.addTranslateC(.{
+        .root_source_file = b.path("src/cimport.c"),
+        .optimize = optimize,
+        .target = target,
+    });
+    c_mod.linkSystemLibrary("cairo", .{});
     const bmi = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
         .optimize = optimize,
@@ -22,8 +29,9 @@ pub fn build(b: *std.Build) !void {
         .single_threaded = true,
         .imports = &.{
             .{ .name = "nwl", .module = nwl.module("nwl") },
-            .{ .name = "wayland", .module = scanner.module },
+            .{ .name = "wayland", .module = b.createModule(.{ .root_source_file = scanner.result }) },
             .{ .name = "sway", .module = b.createModule(.{ .root_source_file = b.path("dep/sway.zig") }) },
+            .{ .name = "c", .module = c_mod.createModule() },
         },
     });
     bmi.linkSystemLibrary("wayland-client", .{});

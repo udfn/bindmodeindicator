@@ -2,7 +2,7 @@ const std = @import("std");
 const nwl = @import("nwl");
 const swayipc = @import("sway");
 pub const wayland = @import("wayland");
-const c = @cImport(@cInclude("cairo.h"));
+const c = @import("c");
 
 pub const std_options: std.Options = .{
     .log_level = if (@import("builtin").mode == .Debug) .debug else .err,
@@ -249,12 +249,11 @@ fn multishotPoll(uring: *std.os.linux.IoUring, fd: std.posix.fd_t, poll_mask: u3
 
 var io_impl: std.Io.Threaded = .init_single_threaded;
 
-pub fn main(init: std.process.Init.Minimal) !void {
+pub fn main(init: std.process.Init) !void {
     var ipc_buf: [512]u8 = undefined;
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     var mistate = ModeIndicatorState{
-        .allocator = gpa.allocator(),
-        .sway = try swayipc.connect(io_impl.io(), &init.environ, null, &ipc_buf),
+        .allocator = init.gpa,
+        .sway = try swayipc.connect(io_impl.io(), &init.minimal.environ, null, &ipc_buf),
         .nwl = .{
             .core = .{
                 .xdg_app_id = "bindindicator",
@@ -263,7 +262,6 @@ pub fn main(init: std.process.Init.Minimal) !void {
             .run_with_zero_surfaces = true,
         },
     };
-    defer _ = gpa.deinit();
     try mistate.sway.subscribe(&.{.Mode});
     try mistate.nwl.init();
     defer mistate.nwl.deinit();
