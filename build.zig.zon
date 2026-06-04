@@ -9,8 +9,8 @@
             .hash = "wayland-0.6.0-dev-lQa1krD8AQBlMqwuhAMJjPQKXvpRByZBxxqMVAZ7yzbG",
         },
         .nwl = .{
-            .url = "git+https://github.com/udfn/nwl.git?ref=master#a64a3f862bbb52415b5e1d8585841c3bfa7a5a11",
-            .hash = "nwl-0.5.0-uTXiTYM3AgDbOE7NfQEYg3tR3dvI3jEgVwlP023ziLLp",
+            .url = "git+https://github.com/udfn/nwl.git?ref=master#c8814f0858dbd133525a8cab737e30ff6be74505",
+            .hash = "nwl-0.5.0-uTXiTZ43AgD3IrnPrH_HFklYWg5DhXSCs1bp16nZMgQ4",
         },
     },
 }
