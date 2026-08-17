@@ -5,7 +5,7 @@ pub const wayland = @import("wayland");
 const c = @import("c");
 
 pub const std_options: std.Options = .{
-    .log_level = if (@import("builtin").mode == .debug) .debug else .err,
+    .log_level = if (@import("builtin").optimize == .debug) .debug else .err,
 };
 
 const ModeIndicatorState = struct {
