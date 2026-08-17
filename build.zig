@@ -8,7 +8,7 @@ pub fn build(b: *std.Build) !void {
     const nwl = b.dependency("nwl", .{
         .optimize = optimize,
         .target = target,
-        .dynamic = optimize == .Debug,
+        .dynamic = optimize == .debug,
     });
 
     const scanner = Scanner.create(b, .{});
